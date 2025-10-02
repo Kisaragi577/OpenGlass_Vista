@@ -58,7 +58,7 @@ namespace OpenGlass::GlassFrameHandler
 	decltype(&MyCButton_SetSize) g_CButton_SetSize_Org{ nullptr };
 	decltype(&MyCButton_SetSize)* g_CButton_SetSize_Org_Address{ nullptr };
 	decltype(&MySetMargin) g_SetMargin_Org{ nullptr };
-	
+
 	UCHAR g_callCDesktopManager_IsHighContrastMode_Instructions[]
 	{
 		// call ???
@@ -84,7 +84,7 @@ namespace OpenGlass::GlassFrameHandler
 		// cmp eax, 3
 		0x83, 0xF8, 0x03,
 		// ja short loc_xxxxxxxx
-		0x77, 
+		0x77,
 	};
 	UCHAR g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_replacedInstructions[]
 	{
@@ -117,7 +117,7 @@ namespace OpenGlass::GlassFrameHandler
 	};
 	std::unordered_map<UCHAR*, std::vector<UCHAR>> g_instructionsToReplace{};
 	std::unordered_map<UCHAR*, std::vector<UCHAR>> g_instructionsBackup{};
-	
+
 	uDWM::CTopLevelWindow* g_window{ nullptr };
 	wil::unique_hrgn g_combinedRgn{ nullptr };
 	RECT g_roundedBounds{};
@@ -132,6 +132,7 @@ namespace OpenGlass::GlassFrameHandler
 		Windows8
 	} g_captionButtons{ 0 };
 	bool g_disableGlassHooks{ false };
+	DWORD g_taskbarCompMode{ 0 }; // NEW! Variable to hold the registry value.
 
 	SIZE CalculateButtonSize(int cySize, int buttonType);
 	HRESULT UpdateReflectionViewport(uDWM::CTopLevelWindow* window);
@@ -210,13 +211,13 @@ HRESULT GlassFrameHandler::UpdateReflectionViewport(uDWM::CTopLevelWindow* windo
 		const auto legacyVisual = window->GetLegacyVisual();
 		legacyVisual &&
 		legacyVisual->GetCount() == 3
-	)
+		)
 	{
 		if (
 			const auto brush = GlassReflectionBrush::GetOrCreate(window);
 			brush &&
 			!window->IsTrullyMinimized()
-		)
+			)
 		{
 			RETURN_IF_FAILED(
 				brush->Update(
@@ -249,13 +250,13 @@ HRESULT GlassFrameHandler::UpdateReflectionViewport(uDWM::CTopLevelWindow* windo
 		const auto clientBlurVisual = window->GetClientBlurVisual();
 		clientBlurVisual &&
 		clientBlurVisual->GetCount() == 2
-	)
+		)
 	{
 		if (
 			const auto brush = GlassReflectionBrush::GetOrCreate(window);
 			brush &&
 			!window->IsTrullyMinimized()
-		)
+			)
 		{
 			RETURN_IF_FAILED(
 				brush->Update(
@@ -287,13 +288,13 @@ HRESULT GlassFrameHandler::UpdateReflectionViewport(uDWM::CTopLevelWindow* windo
 	if (
 		const auto accentVisual = window->GetAccent();
 		accentVisual
-	)
+		)
 	{
 		if (
 			const auto brush = GlassReflectionBrush::GetOrCreate(window);
 			brush &&
 			!window->IsTrullyMinimized()
-		)
+			)
 		{
 			RETURN_IF_FAILED(
 				brush->Update(
@@ -369,7 +370,7 @@ HRGN WINAPI GlassFrameHandler::MyExtCreateRegion(const XFORM* lpx, DWORD nCount,
 		if (
 			Shared::g_dontDeflateInactiveFrameGeometry &&
 			rectangles[0].top == static_cast<LONG>(uDWM::CDesktopManager::GetInstance()->GetDPIValue())
-		)
+			)
 		{
 			// top
 			rectangles[0].top = 0;
@@ -531,12 +532,12 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateNCAreaBackg
 		highContrastMode = true;
 	}
 	const auto highContrastFakeScope = wil::scope_exit([&highContrastMode, old_highContrastMode]
-	{
-		if (uDWM::g_versionInfo.build >= os::build_w11_21h2)
 		{
-			highContrastMode = old_highContrastMode;
-		}
-	});
+			if (uDWM::g_versionInfo.build >= os::build_w11_21h2)
+			{
+				highContrastMode = old_highContrastMode;
+			}
+		});
 
 	{
 		const auto active = This->TreatAsActiveWindow();
@@ -550,7 +551,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateNCAreaBackg
 			const auto legacyVisual = This->GetLegacyVisual();
 			legacyVisual &&
 			SUCCEEDED(legacyVisual->_ValidateVisual())
-		)
+			)
 		{
 			if (auto captionGeometry = This->GetCaptionGeometry(); captionGeometry)
 			{
@@ -570,7 +571,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateNCAreaBackg
 						);
 						brush &&
 						!This->IsTrullyMinimized()
-					)
+						)
 					{
 						RETURN_IF_FAILED(
 							brush->Update(
@@ -579,7 +580,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateNCAreaBackg
 									active ?
 									Shared::g_reflectionIntensity :
 									Shared::g_reflectionIntensityInactive
-								) :
+									) :
 								0.f,
 								GlassReflectionBrush::CalculateTargetViewport(
 									legacyVisual->GetLocalToParentVisualOffset(This->GetTransformParent()),
@@ -664,19 +665,19 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateNCAreaPosit
 	int cxLeft = borderMargins.cxLeftWidth ? borderMargins.cxLeftWidth : This->GetFrameThickness();
 
 	auto UpdateButton = [&](int buttonType, int offsetRight, int offsetTop, SIZE buttonSize)
-	{
-		if (auto button = This->GetButton(buttonType); button)
 		{
-			MARGINS inset = { 0x7FFFFFFF, offsetRight, offsetTop, 0x7FFFFFFF };
+			if (auto button = This->GetButton(buttonType); button)
+			{
+				MARGINS inset = { 0x7FFFFFFF, offsetRight, offsetTop, 0x7FFFFFFF };
 
-			g_CButton_SetSize_Org(button, &buttonSize);
-			button->SetInsetFromParent(inset);
-			button->GetGlyphOpacity() = 1.f;
+				g_CButton_SetSize_Org(button, &buttonSize);
+				button->SetInsetFromParent(inset);
+				button->GetGlyphOpacity() = 1.f;
 
-			return true;
-		}
-		return false;
-	};
+				return true;
+			}
+			return false;
+		};
 
 	int cySize = GetSystemMetricsForDpi(SM_CYSIZE, data->GetWindowDPI());
 
@@ -745,10 +746,10 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateClientBlur(
 	}
 
 	if (
-		const auto clientBlurVisual = This->GetClientBlurVisual(); 
+		const auto clientBlurVisual = This->GetClientBlurVisual();
 		clientBlurVisual &&
 		clientBlurVisual->GetCount() == 1
-	)
+		)
 	{
 		if (
 			const auto brush = GlassReflectionBrush::GetOrCreate(
@@ -757,7 +758,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateClientBlur(
 			);
 			brush &&
 			!This->IsTrullyMinimized()
-		)
+			)
 		{
 			RETURN_IF_FAILED(
 				brush->Update(
@@ -766,7 +767,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateClientBlur(
 						active ?
 						Shared::g_reflectionIntensity :
 						Shared::g_reflectionIntensityInactive
-					) :
+						) :
 					0.f,
 					GlassReflectionBrush::CalculateTargetViewport(
 						clientBlurVisual->GetLocalToParentVisualOffset(This->GetTransformParent()),
@@ -794,7 +795,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateClientBlur(
 					brush.get(),
 					static_cast<uDWM::CDrawGeometryInstruction*>(
 						clientBlurVisual->GetInstructions().views()[0]
-					)->GetGeometry(),
+						)->GetGeometry(),
 					instruction.put()
 				)
 			);
@@ -808,13 +809,13 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_UpdateClientBlur(
 HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCButton_CloneVisualTree(uDWM::CButton* This, uDWM::CButton** clonedVisual, UINT cloneOption)
 {
 	auto cleanup = wil::scope_exit([clonedVisual]
-	{
-		if (clonedVisual)
 		{
-			(*clonedVisual)->Release();
-			*clonedVisual = nullptr;
-		}
-	});
+			if (clonedVisual)
+			{
+				(*clonedVisual)->Release();
+				*clonedVisual = nullptr;
+			}
+		});
 
 	// CButton::CancelCrossfade
 	if (This->GetTimeline())
@@ -845,9 +846,9 @@ void STDMETHODCALLTYPE GlassFrameHandler::MyCButton_SetSize(uDWM::CButton* This,
 	if (Shared::g_captionHeight.has_value())
 	{
 		const SIZE replacedSize
-		{ 
-			size->cx, 
-			std::min(size->cy, static_cast<LONG>(Shared::g_captionHeight.value() * uDWM::CDesktopManager::GetInstance()->GetDPIValue())) 
+		{
+			size->cx,
+			std::min(size->cy, static_cast<LONG>(Shared::g_captionHeight.value() * uDWM::CDesktopManager::GetInstance()->GetDPIValue()))
 		};
 		return g_CButton_SetSize_Org(This, &replacedSize);
 	}
@@ -862,13 +863,30 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_ValidateVisual(uD
 	{
 		return g_CTopLevelWindow_ValidateVisual_Org(This);
 	}
+	// NEW! Check if the TaskbarCompMode is enabled before running the logic.
+	if (g_taskbarCompMode == 1)
+	{
+		// Force a theme refresh when maximized
+		static bool wasAnyWindowMaximized = uDWM::CDesktopManager::GetInstance()->HasMaximizedWindows();
+		bool isAnyWindowMaximized = uDWM::CDesktopManager::GetInstance()->HasMaximizedWindows();
+
+		if (wasAnyWindowMaximized != isAnyWindowMaximized)
+		{
+			wasAnyWindowMaximized = isAnyWindowMaximized;
+			HWND dwmHwnd = FindWindowW(L"DWM", nullptr);
+			if (dwmHwnd)
+			{
+				PostMessageW(dwmHwnd, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+			}
+		}
+	}
 
 	g_window = This;
 	const auto updateReflectionBeforeLeave = wil::scope_exit([This]
-	{
-		g_window = nullptr;
-		LOG_IF_FAILED(UpdateReflectionViewport(This));
-	});
+		{
+			g_window = nullptr;
+			LOG_IF_FAILED(UpdateReflectionViewport(This));
+		});
 
 	if (uDWM::g_versionInfo.build < os::build_w11_21h2)
 	{
@@ -889,7 +907,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_ValidateVisual(uD
 	const auto old_borderUpdatesSuppressed = borderUpdatesSuppressed;
 	const auto disableModernFrames = Shared::g_disableModernBorders && This->HasNonClientBackground(data);
 	const auto windowBorder = This->GetWindowBorder();
-	
+
 	g_systemBackdrop = (uDWM::g_versionInfo.build == os::build_w11_21h2 && old_systemBackdropType) || (uDWM::g_versionInfo.build > os::build_w11_21h2 && old_systemBackdropType >= DWMSBT_MAINWINDOW);
 	systemBackdropType = (uDWM::g_versionInfo.build == os::build_w11_21h2 ? DWMSBT_AUTO : DWMSBT_NONE);
 	captionColorOverride = 0;
@@ -928,29 +946,29 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_ValidateVisual(uD
 	}
 
 	const auto scope = wil::scope_exit([&, old_textColorOverride, old_borderColorOverride, old_captionColorOverride, old_systemBackdropType, old_extendedFrameMargins, disableModernFrames]
-	{
-		for (const auto& [address, instructions] : g_instructionsBackup)
 		{
-			HookHelper::PatchInstructions(
-				address,
-				instructions.data(),
-				instructions.size()
-			);
-		}
-		if (disableModernFrames)
-		{
-			if (g_systemBackdrop)
+			for (const auto& [address, instructions] : g_instructionsBackup)
 			{
-				extendedFrameMargins = old_extendedFrameMargins;
+				HookHelper::PatchInstructions(
+					address,
+					instructions.data(),
+					instructions.size()
+				);
 			}
-			borderUpdatesSuppressed = old_borderUpdatesSuppressed;
-		}
-		g_systemBackdrop = false;
-		textColorOverride = old_textColorOverride;
-		borderColorOverride = old_borderColorOverride;
-		captionColorOverride = old_captionColorOverride;
-		systemBackdropType = old_systemBackdropType;
-	});
+			if (disableModernFrames)
+			{
+				if (g_systemBackdrop)
+				{
+					extendedFrameMargins = old_extendedFrameMargins;
+				}
+				borderUpdatesSuppressed = old_borderUpdatesSuppressed;
+			}
+			g_systemBackdrop = false;
+			textColorOverride = old_textColorOverride;
+			borderColorOverride = old_borderColorOverride;
+			captionColorOverride = old_captionColorOverride;
+			systemBackdropType = old_systemBackdropType;
+		});
 
 
 	return g_CTopLevelWindow_ValidateVisual_Org(This);
@@ -987,6 +1005,7 @@ void GlassFrameHandler::Update(GlassEngine::UpdateType type)
 	{
 		Shared::g_disableModernBorders = static_cast<bool>(GlassEngine::GetDwordFromRegistry(L"DisableModernBorders", FALSE));
 		g_captionButtons = static_cast<CaptionButtons>(GlassEngine::GetDwordFromRegistry(L"CaptionButtons", 0));
+		g_taskbarCompMode = GlassEngine::GetDwordFromRegistry(L"TaskbarCompMode"); // NEW! Read registry value on update.
 	}
 }
 
@@ -1004,7 +1023,7 @@ void GlassFrameHandler::Startup()
 	{
 		return;
 	}
-
+	g_taskbarCompMode = GlassEngine::GetDwordFromRegistry(L"TaskbarCompMode");
 	uDWM::g_projectionArray.ApplyToVariable("CGlassColorizationParameters::AdjustWindowColorization", g_CGlassColorizationParameters_AdjustWindowColorization_Org);
 	uDWM::g_projectionArray.ApplyToVariable("ResourceHelper::CreateGeometryFromHRGN", g_ResourceHelper_CreateGeometryFromHRGN_Org);
 	uDWM::g_projectionArray.ApplyToVariable("CTopLevelAtlasedRectsVisual::ShouldCloneAtlasImage", g_CTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage_Org);
@@ -1015,7 +1034,7 @@ void GlassFrameHandler::Startup()
 	uDWM::g_projectionArray.ApplyToVariable("CTopLevelWindow::~CTopLevelWindow", g_CTopLevelWindow_Destructor_Org);
 	uDWM::g_projectionArray.ApplyToVariable("CTopLevelWindow::CloneVisualTreeForLivePreview", g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org);
 	uDWM::g_projectionArray.ApplyToVariable("SetMargin", g_SetMargin_Org);
-	
+
 	PVOID CVisual_SetSize_Org{ nullptr };
 	PVOID CAtlasedRectsVisual_CloneVisualTree_Org{ nullptr };
 	uDWM::g_projectionArray.ApplyToVariable("CVisual::SetSize", CVisual_SetSize_Org);
@@ -1056,7 +1075,7 @@ void GlassFrameHandler::Startup()
 					g_callCDesktopManager_IsHighContrastMode_Instructions,
 					sizeof(g_callCDesktopManager_IsHighContrastMode_Instructions)
 				) == 0
-			)
+				)
 			{
 				// in case we touched the inlined call part of CTopLevelWindow::GetBorderRect
 				if (callCDesktopManager_IsHighContrastMode_SecondTime)
@@ -1099,7 +1118,7 @@ void GlassFrameHandler::Startup()
 						g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_Instructions,
 						sizeof(g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_Instructions)
 					) == 0
-				)
+					)
 				{
 					std::vector<UCHAR> backup(sizeof(g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_Instructions), 0);
 					memcpy_s(
@@ -1114,7 +1133,7 @@ void GlassFrameHandler::Startup()
 					);
 					g_instructionsToReplace.insert_or_assign(
 						CTopLevelWindow_UpdateWindowVisuals_Instructions,
-						std::vector(std::begin(g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_replacedInstructions), std::end(g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_replacedInstructions))	
+						std::vector(std::begin(g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_replacedInstructions), std::end(g_callCTopLevelWindow_IsShadowNCAreaPart_inlined_replacedInstructions))
 					);
 					break;
 				}
@@ -1135,7 +1154,7 @@ void GlassFrameHandler::Startup()
 						g_callCTopLevelWindow_IsShadowNCAreaPart_Instructions,
 						sizeof(g_callCTopLevelWindow_IsShadowNCAreaPart_Instructions)
 					) == 0
-				)
+					)
 				{
 					std::vector<UCHAR> backup(sizeof(g_callCTopLevelWindow_IsShadowNCAreaPart_Instructions), 0);
 					memcpy_s(
@@ -1174,31 +1193,31 @@ void GlassFrameHandler::Startup()
 
 	THROW_IF_FAILED(
 		HookHelper::Detours::Write([]() static
+	{
+		HookHelper::Detours::Attach(&g_CGlassColorizationParameters_AdjustWindowColorization_Org, MyCGlassColorizationParameters_AdjustWindowColorization);
+		HookHelper::Detours::Attach(&g_ResourceHelper_CreateGeometryFromHRGN_Org, MyResourceHelper_CreateGeometryFromHRGN);
+		HookHelper::Detours::Attach(&g_CTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage_Org, MyCTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage);
+		HookHelper::Detours::Attach(&g_CTopLevelWindow_UpdateNCAreaBackground_Org, MyCTopLevelWindow_UpdateNCAreaBackground);
+		HookHelper::Detours::Attach(&g_CTopLevelWindow_UpdateNCAreaPositionsAndSizes_Org, MyCTopLevelWindow_UpdateNCAreaPositionsAndSizes);
+		HookHelper::Detours::Attach(&g_CTopLevelWindow_UpdateClientBlur_Org, MyCTopLevelWindow_UpdateClientBlur);
+
+		if (uDWM::g_versionInfo.build <= os::build_w11_21h2)
 		{
-			HookHelper::Detours::Attach(&g_CGlassColorizationParameters_AdjustWindowColorization_Org, MyCGlassColorizationParameters_AdjustWindowColorization);
-			HookHelper::Detours::Attach(&g_ResourceHelper_CreateGeometryFromHRGN_Org, MyResourceHelper_CreateGeometryFromHRGN);
-			HookHelper::Detours::Attach(&g_CTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage_Org, MyCTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage);
-			HookHelper::Detours::Attach(&g_CTopLevelWindow_UpdateNCAreaBackground_Org, MyCTopLevelWindow_UpdateNCAreaBackground);
-			HookHelper::Detours::Attach(&g_CTopLevelWindow_UpdateNCAreaPositionsAndSizes_Org, MyCTopLevelWindow_UpdateNCAreaPositionsAndSizes);
-			HookHelper::Detours::Attach(&g_CTopLevelWindow_UpdateClientBlur_Org, MyCTopLevelWindow_UpdateClientBlur);
-			
-			if (uDWM::g_versionInfo.build <= os::build_w11_21h2)
-			{
-				HookHelper::Detours::Attach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win10);
-			}
-			else
-			{
-				HookHelper::Detours::Attach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win11);
-			}
+			HookHelper::Detours::Attach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win10);
+		}
+		else
+		{
+			HookHelper::Detours::Attach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win11);
+		}
 
-			HookHelper::Detours::Attach(&g_CTopLevelWindow_Destructor_Org, MyCTopLevelWindow_Destructor);
-			HookHelper::Detours::Attach(&g_CTopLevelWindow_ValidateVisual_Org, MyCTopLevelWindow_ValidateVisual);
+		HookHelper::Detours::Attach(&g_CTopLevelWindow_Destructor_Org, MyCTopLevelWindow_Destructor);
+		HookHelper::Detours::Attach(&g_CTopLevelWindow_ValidateVisual_Org, MyCTopLevelWindow_ValidateVisual);
 
-			if (uDWM::g_versionInfo.build >= os::build_w11_21h2)
-			{
-				HookHelper::Detours::Attach(&g_SetMargin_Org, MySetMargin);
-			}
-		})
+		if (uDWM::g_versionInfo.build >= os::build_w11_21h2)
+		{
+			HookHelper::Detours::Attach(&g_SetMargin_Org, MySetMargin);
+		}
+	})
 	);
 }
 
@@ -1211,30 +1230,30 @@ void GlassFrameHandler::Shutdown()
 
 	THROW_IF_FAILED(
 		HookHelper::Detours::Write([]() static
+	{
+		HookHelper::Detours::Detach(&g_CGlassColorizationParameters_AdjustWindowColorization_Org, MyCGlassColorizationParameters_AdjustWindowColorization);
+		HookHelper::Detours::Detach(&g_ResourceHelper_CreateGeometryFromHRGN_Org, MyResourceHelper_CreateGeometryFromHRGN);
+		HookHelper::Detours::Detach(&g_CTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage_Org, MyCTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage);
+		HookHelper::Detours::Detach(&g_CTopLevelWindow_UpdateNCAreaBackground_Org, MyCTopLevelWindow_UpdateNCAreaBackground);
+		HookHelper::Detours::Detach(&g_CTopLevelWindow_UpdateNCAreaPositionsAndSizes_Org, MyCTopLevelWindow_UpdateNCAreaPositionsAndSizes);
+		HookHelper::Detours::Detach(&g_CTopLevelWindow_UpdateClientBlur_Org, MyCTopLevelWindow_UpdateClientBlur);
+		HookHelper::Detours::Detach(&g_CTopLevelWindow_Destructor_Org, MyCTopLevelWindow_Destructor);
+		HookHelper::Detours::Detach(&g_CTopLevelWindow_ValidateVisual_Org, MyCTopLevelWindow_ValidateVisual);
+
+		if (uDWM::g_versionInfo.build <= os::build_w11_21h2)
 		{
-			HookHelper::Detours::Detach(&g_CGlassColorizationParameters_AdjustWindowColorization_Org, MyCGlassColorizationParameters_AdjustWindowColorization);
-			HookHelper::Detours::Detach(&g_ResourceHelper_CreateGeometryFromHRGN_Org, MyResourceHelper_CreateGeometryFromHRGN);
-			HookHelper::Detours::Detach(&g_CTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage_Org, MyCTopLevelAtlasedRectsVisual_ShouldCloneAtlasImage);
-			HookHelper::Detours::Detach(&g_CTopLevelWindow_UpdateNCAreaBackground_Org, MyCTopLevelWindow_UpdateNCAreaBackground);
-			HookHelper::Detours::Detach(&g_CTopLevelWindow_UpdateNCAreaPositionsAndSizes_Org, MyCTopLevelWindow_UpdateNCAreaPositionsAndSizes);
-			HookHelper::Detours::Detach(&g_CTopLevelWindow_UpdateClientBlur_Org, MyCTopLevelWindow_UpdateClientBlur);
-			HookHelper::Detours::Detach(&g_CTopLevelWindow_Destructor_Org, MyCTopLevelWindow_Destructor);
-			HookHelper::Detours::Detach(&g_CTopLevelWindow_ValidateVisual_Org, MyCTopLevelWindow_ValidateVisual);
+			HookHelper::Detours::Detach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win10);
+		}
+		else
+		{
+			HookHelper::Detours::Detach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win11);
+		}
 
-			if (uDWM::g_versionInfo.build <= os::build_w11_21h2)
-			{
-				HookHelper::Detours::Detach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win10);
-			}
-			else
-			{
-				HookHelper::Detours::Detach(&g_CTopLevelWindow_CloneVisualTreeForLivePreview_Org, MyCTopLevelWindow_CloneVisualTreeForLivePreview_Win11);
-			}
-
-			if (uDWM::g_versionInfo.build >= os::build_w11_21h2)
-			{
-				HookHelper::Detours::Detach(&g_SetMargin_Org, MySetMargin);
-			}
-		})
+		if (uDWM::g_versionInfo.build >= os::build_w11_21h2)
+		{
+			HookHelper::Detours::Detach(&g_SetMargin_Org, MySetMargin);
+		}
+	})
 	);
 
 	SwitchToThread();

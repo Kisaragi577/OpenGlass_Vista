@@ -154,7 +154,15 @@ int WINAPI CaptionTextHandler::MyDrawTextW(
 	OffsetRect(lprc, g_textGlowSize, g_textGlowSize);
 	
 	const auto textColor = GetTextColor(hdc);
-	const auto textColorOverride = g_textVisualStateMap[g_textVisual].active ? g_captionActiveColor : g_captionInactiveColor;
+	const auto& windowState = g_textVisualStateMap[g_textVisual];
+	COLORREF textColorOverride;
+
+	if (windowState.active) {
+		textColorOverride = windowState.maximized ? g_captionActiveColorMaximized : g_captionActiveColor;
+	}
+	else {
+		textColorOverride = windowState.maximized ? g_captionInactiveColorMaximized : g_captionInactiveColor;
+	}
 	DTTOPTS options
 	{
 		sizeof(DTTOPTS),

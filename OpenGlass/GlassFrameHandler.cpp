@@ -876,6 +876,7 @@ HRESULT STDMETHODCALLTYPE GlassFrameHandler::MyCTopLevelWindow_ValidateVisual(uD
 			HWND dwmHwnd = FindWindowW(L"DWM", nullptr);
 			if (dwmHwnd)
 			{
+				PostMessageW(dwmHwnd, WM_THEMECHANGED, 0, 0);
 				PostMessageW(dwmHwnd, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
 			}
 		}

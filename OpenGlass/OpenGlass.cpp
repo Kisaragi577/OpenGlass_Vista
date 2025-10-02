@@ -737,6 +737,12 @@ void OpenGlass::Startup()
 #endif // _DEBUG
 
 	GlassEngine::RedrawAll();
+	// Force redraw on startup
+	if (HWND dwmHwnd = FindWindowW(L"DWM", nullptr))
+	{
+		PostMessageW(dwmHwnd, WM_THEMECHANGED, 0, 0);
+		PostMessageW(dwmHwnd, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+	}
 
 	g_startup = true;
 	return;
@@ -782,6 +788,13 @@ void OpenGlass::Shutdown()
 	GlassEngine::Shutdown();
 	GlassEngine::UnloadRegistry();
 	GlassEngine::RedrawAll();
+
+	// Failsafe
+	if (HWND dwmHwnd = FindWindowW(L"DWM", nullptr))
+	{
+		SendMessageW(dwmHwnd, WM_THEMECHANGED, 0, 0);
+		SendMessageW(dwmHwnd, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+	}
 
 	THROW_IF_FAILED(
 		HookHelper::Detours::Write([]() static

@@ -54,16 +54,31 @@ HRESULT STDMETHODCALLTYPE AccentOverrider::MyCAccent_UpdateAccentPolicy(
 	}
 
 	HRESULT hr{ S_OK };
-	if (!Shared::g_overrideAccent)
+
+	const auto window = uDWM::TryGetWindowFromVisual(This);
+	bool isTaskbar = false;
+	if (window) {
+		const HWND hwnd = window->GetData()->GetHwnd();
+		if (hwnd) {
+			wchar_t className[32];
+			if (GetClassNameW(hwnd, className, 32)) {
+				if (_wcsicmp(className, L"Shell_TrayWnd") == 0 || _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+					isTaskbar = true;
+				}
+			}
+		}
+	}
+
+	if (Shared::g_overrideAccent || (g_taskbarCompMode == 1 && isTaskbar))
 	{
-		hr = g_CAccent_UpdateAccentPolicy_Org(This, rect, policy, geometry);
+		auto accentPolicy = *policy;
+		accentPolicy.AccentState = 1; // ACCENT_DISABLED
+		accentPolicy.dwGradientColor = 0;
+		hr = g_CAccent_UpdateAccentPolicy_Org(This, rect, &accentPolicy, geometry);
 	}
 	else
 	{
-		auto accentPolicy = *policy;
-		accentPolicy.AccentState = 1;
-		accentPolicy.dwGradientColor = 0;
-		hr = g_CAccent_UpdateAccentPolicy_Org(This, rect, &accentPolicy, geometry);
+		hr = g_CAccent_UpdateAccentPolicy_Org(This, rect, policy, geometry);
 	}
 
 	return hr;
